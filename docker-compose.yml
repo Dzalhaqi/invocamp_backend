@@ -1,0 +1,94 @@
+version: "3"
+services:
+  db:
+    container_name: postgres_container
+    image: postgres:14.7-bullseye
+    restart: always
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    expose:
+      - 5432
+    networks:
+      - my_network
+
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "5051:80"
+    expose:
+      - 5051
+    networks:
+      - my_network
+
+  redis:
+    container_name: redis_container
+    image: redis
+    ports:
+      - "6379:6379"
+    expose:
+      - 6379
+    volumes:
+      - ./data:/data
+    networks:
+      - my_network
+
+  django_invocamp:
+    container_name: django_invocamp
+    build: .
+    command: python invocamp_backend/manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/backend
+    ports:
+      - "8000:8000"
+    expose:
+      - 8000
+    depends_on:
+      - db
+      - redis
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_NAME: ${DATABASE_NAME}
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_HOST: ${DATABASE_HOST}
+      DATABASE_PORT: ${DATABASE_PORT}
+      SITE_ID: ${SITE_ID}
+      GOOGLE_OAUTH2_KEY: ${GOOGLE_OAUTH2_KEY}
+      GOOGLE_OAUTH2_SECRET: ${GOOGLE_OAUTH2_SECRET}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT}
+      NEXTJS_URL: ${NEXTJS_URL}
+    networks:
+      - my_network
+    env_file:
+      - .env
+
+  nginx:
+    container_name: nginx_container
+    image: nginx:latest
+    ports:
+      - "80:80"
+    expose:
+      - 80
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - django_invocamp
+    networks:
+      - my_network
+  
+networks:
+  my_network:
