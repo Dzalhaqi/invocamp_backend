@@ -13,17 +13,16 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 from pathlib import Path
 import os
 import environ
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load .env file
-
 env = environ.Env()
 
 # read .env file
-
-environ.Env.read_env()
+environ.Env.read_env(os.path.join(BASE_DIR, '..', '.env'))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
@@ -38,16 +37,16 @@ DEBUG = False
 
 # Site settings
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['*', 'localhost', 'http://172.23.0.1:8000']
 INTERNAL_IPS = ["127.0.0.1"]
+NEXTJS_URL = env('NEXTJS_URL')
 SITE_ID = 4
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ORIGIN_WHITELIST = (
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'http://localhost:8000',
-    'http://127.0.0.1:8000',
+    'http://next_invocamp:3000'
 )
 
 # Application definition
@@ -245,6 +244,13 @@ REST_AUTH = {
     'JWT_AUTH_REFRESH_COOKIE': 'my-refresh-token',
 }
 
+# Simple JWT
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+}
+
 # Email
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -349,19 +355,19 @@ JAZZMIN_SETTINGS = {
     "site_brand": "InvoCamp",
 
     # Logo to use for your site, must be present in static files, used for brand on top left
-    "site_logo": "img/logo.png",
+    "site_logo": "img/logo2.png",
 
     # Logo to use for your site, must be present in static files, used for login form logo (defaults to site_logo)
-    "login_logo": 'img/logo.png',
+    "login_logo": 'img/logo2.png',
 
     # Logo to use for login form in dark themes (defaults to login_logo)
-    "login_logo_dark": 'img/logo.png',
+    "login_logo_dark": 'img/logo2.png',
 
     # CSS classes that are applied to the logo above
     "site_logo_classes": "img-circle",
 
     # Relative path to a favicon for your site, will default to site_logo if absent (ideally 32x32 px)
-    "site_icon": 'img/logo.png',
+    "site_icon": 'img/logo2.png',
 
     # Welcome text on the login screen
     "welcome_sign": "Welcome to The InvoCamp Admin Panel",

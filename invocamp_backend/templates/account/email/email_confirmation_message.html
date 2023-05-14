@@ -291,8 +291,13 @@ table, td { color: #000000; } #u_body a { color: #0000ee; text-decoration: under
         
   <div class="v-text-align v-font-size" style="color: #34495e; line-height: 140%; text-align: left; word-wrap: break-word;">
     <p style="font-size: 14px; line-height: 140%;">
-      {% block content %}{% autoescape off %}{% user_display user as user_display %}{% blocktrans with site_name=current_site.name site_domain=current_site.domain %}You're receiving this e-mail because user {{ user_display }} has given your e-mail address to register an account on {{ site_domain }}.
-{% endblocktrans %}{% endautoescape %}{% endblock %}
+      {% block content %}{% autoescape off %}
+      {% user_display user as user_display %}
+      {% comment %} {% blocktrans with site_name=current_site.name site_domain=current_site.domain %} You're receiving this e-mail because user {{ user_display }} has given your e-mail address to register an account on {{ site_domain }}.
+      {% endblocktrans %} {% endcomment %}
+      {% blocktrans with site=site %} You're receiving this e-mail because user {{ user }} has given your e-mail address to register an account on {{ site }}.
+      {% endblocktrans %}
+{% endautoescape %}{% endblock %}
     </p>
     <br>
     <p style="font-size: 14px; line-height: 140%;">To verify your account, please click button below</p>

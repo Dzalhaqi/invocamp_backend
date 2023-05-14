@@ -1,3 +1,8 @@
+from django.template.loader import render_to_string
+from django.core.mail import send_mail
+from django.utils.html import strip_tags
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from allauth.account.models import EmailConfirmationHMAC
 from dj_rest_auth.registration.views import SocialLoginView
@@ -7,12 +12,9 @@ from allauth.socialaccount.models import SocialAccount
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, login
 from django.urls import reverse
-from dj_rest_auth.views import LoginView
 from django.contrib.auth import get_user_model
 from django.core.validators import validate_email
-from urllib import response
 from urllib.parse import urlencode
-from django.shortcuts import redirect
 
 import requests
 from allauth.account.utils import complete_signup, send_email_confirmation
@@ -43,49 +45,12 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.views import APIView
 
-from .models import CustomUser, Intern, Recruiter
-from .serializers import (CustomUserLoginSerializer, CurrentUserSerializer,
-                          CustomUserSignupSerializer, InternSerializer,
-                          RecruiterSerializer)
+from account_app.models import Intern, Recruiter
+from account_app.serializers.account_serializers import (CustomUserLoginSerializer,
+                                                         CustomUserRegisterSerializer, EmailVerificationSerializer)
 
-# class CompanyCreateView(CreateView):
-#   model = Company
-#   fields = ['company_name', 'description']
-#   template_name = 'company_create.html'
-#   success_url = reverse_lazy('home')
-
-#   def form_valid(self, form):
-#     user = CustomUser.objects.create_user(
-#         email=form.cleaned_data['email'], password=form.cleaned_data['password'], is_validated=True)
-#     user.first_name = form.cleaned_data['first_name']
-#     user.last_name = form.cleaned_data['last_name']
-#     user.is_staff = True
-#     user.save()
-#     self.object = form.save(commit=False)
-#     self.object.user = user
-#     self.object.save()
-#     return super().form_valid(form)
-
-
-# class EmployeeCreateView(CreateView):
-#   model = Employee
-#   fields = ['phone_number', 'education', 'experience']
-#   template_name = 'employee_create.html'
-#   success_url = reverse_lazy('home')
-
-#   def form_valid(self, form):
-#     user = CustomUser.objects.create_user(
-#         email=form.cleaned_data['email'], password=form.cleaned_data['password'])
-
-
-class RecruiterViewSet(viewsets.ModelViewSet):
-  queryset = Recruiter.objects.all()
-  serializer_class = RecruiterSerializer
-
-
-class InternViewSet(viewsets.ModelViewSet):
-  queryset = Intern.objects.all()
-  serializer_class = InternSerializer
+from account_app.serializers.intern_serializer import InternSerializer
+from account_app.serializers.recruiter_serializer import RecruiterSerializer
 
 
 class GoogleLogin(SocialLoginView):
@@ -187,26 +152,57 @@ class GoogleSignup(SocialLoginView):
 
 
 class CustomUserRegisterView(APIView):
-  serializer_class = CustomUserSignupSerializer
+  serializer_class = CustomUserRegisterSerializer
 
   def post(self, request, format=None):
     serializer = self.serializer_class(data=request.data)
     if serializer.is_valid():
-      user = serializer.save()
-      EmailAddress.objects.create(
-          user=user, email=user.email, primary=True, verified=False)
-      self.send_email_verification(request, user)
-      return Response({
-          "message": "Successfully registered",
-          "code": 200,
-          "details": "Account created successfully. Please check your email for verification."
-      }, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+      try:
+        user = serializer.save()
+        EmailAddress.objects.create(
+            user=user, email=user.email, primary=True, verified=False)
+        self.send_email_verification(request, user)
+        return Response({
+            "success": True,
+            "code": 200,
+            "detail": "Account created successfully. Please check your email for verification."
+        }, status=status.HTTP_201_CREATED)
+      except Exception as e:
+        return Response({
+            "error": True,
+            "code": 400,
+            "detail": "Email already exists"
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+        "error": True,
+        "code": 400,
+        "detail": serializer.errors
+    }, status=status.HTTP_400_BAD_REQUEST)
 
   def send_email_verification(self, request, user):
     email_address = user.emailaddress_set.get(email=user.email)
     confirmation = EmailConfirmationHMAC(email_address)
-    send_email_confirmation(request, email_address.user, confirmation)
+    confirmation_key = confirmation.key
+    nextjs_url = settings.NEXTJS_URL
+    activate_url = f'{nextjs_url}/email/{confirmation_key}'
+    context = {
+        'activate_url': activate_url,
+        'user': user,
+        'site': settings.SITE_NAME
+    }
+    html_message = render_to_string(
+        'account/email/email_confirmation_message.html', context)
+    plain_message = strip_tags(html_message)
+    from_email = settings.DEFAULT_FROM_EMAIL
+    to = [user.email]
+    send_mail(
+        'Activate your account',
+        plain_message,
+        from_email,
+        to,
+        html_message=html_message,
+    )
 
 
 class CustomUserLoginView(APIView):
@@ -220,14 +216,18 @@ class CustomUserLoginView(APIView):
         email=serializer.validated_data['email'], password=serializer.validated_data['password'])
 
     if not user:
-      return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+      return Response({
+          'error': True,
+          'code': 401,
+          'detail': 'Email or password incorrect'
+      }, status=status.HTTP_401_UNAUTHORIZED)
 
     email_address = EmailAddress.objects.get(user=user, email=user.email)
     if not email_address.verified:
       return Response({
-          'message': 'Failed',
+          'error': True,
           'code': 401,
-          'details': 'Email not verified'
+          'detail': 'Email not verified'
       }, status=status.HTTP_401_UNAUTHORIZED)
 
     refresh = RefreshToken.for_user(user)
@@ -243,12 +243,35 @@ class CurrentUserView(APIView):
   permission_classes = (IsAuthenticated,)
 
   def get(self, request):
-    serializer = CurrentUserSerializer(request.user)
-    return Response(serializer.data)
+    serializer = None
+    if request.user.account_type == 'Intern':
+      serializer = InternSerializer(request.user.interns)
+    elif request.user.account_type == 'Recruiter':
+      serializer = RecruiterSerializer(request.user.recruiters)
+    else:
+      raise Exception('Invalid account type')
+
+    return Response({
+        'success': True,
+        'code': 200,
+        'user': serializer.data
+    }, status=status.HTTP_200_OK)
 
 
 class CustomLogoutView(LogoutView):
-  pass
+  permission_classes = (IsAuthenticated,)
+  authentication_classes = (JWTAuthentication,)
+
+  def post(self, request):
+    try:
+      refresh_token = request.data.get('refresh')
+      token = RefreshToken(refresh_token)
+      token.blacklist()
+      return Response(status=status.HTTP_205_RESET_CONTENT)
+    except TokenError as e:
+      return Response({'error': 'Invalid refresh token.'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+      return Response(status=status.HTTP_400_BAD_REQUEST)
 
 
 class CustomUserConfirmEmailView(ConfirmEmailView, APIView):
@@ -256,52 +279,56 @@ class CustomUserConfirmEmailView(ConfirmEmailView, APIView):
     response = super().get(*args, **kwargs)
     if response.status_code == 302:
       error_data = {
-          'message': 'Error',
+          'error': True,
           'status': status.HTTP_400_BAD_REQUEST,
-          'details': 'Email has already been confirmed'
+          'detail': 'Email has already been confirmed'
       }
       return Response(error_data, status=status.HTTP_400_BAD_REQUEST)
     else:
       success_data = {
-          'message': 'Success',
+          'success': True,
           'status': status.HTTP_200_OK,
-          'details': 'Email has been successfully confirmed'
+          'detail': 'Email has been successfully confirmed'
       }
       return Response(success_data, status=status.HTTP_200_OK)
 
-  def post(self, request, *args, **kwargs):
-    try:
-      response = super().post(request, *args, **kwargs)
-      if response.status_code == 302:
-        return Response({
-            'message': 'Success',
-            'code': 200,
-            'detail': 'Successfully verified email'
-        }, status=status.HTTP_200_OK)
-    except Exception as e:
-      return Response({
-          'message': 'Error',
-          'code': 400,
-          'detail': str(e)
-      }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class CustomResendEmailVerificationView(ResendEmailVerificationView):
+  serializer_class = EmailVerificationSerializer
+
   def post(self, request, *args, **kwargs):
-    email = request.data.get('email', None)
+    serializer = self.serializer_class(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    email = serializer.validated_data['email']
     if email:
       try:
         email_address = EmailAddress.objects.get(email=email).user
-        print(email_address)
         if EmailAddress.objects.filter(email=email, verified=True).exists():
-          return Response({'detail': 'Email has already been verified.'}, status=status.HTTP_400_BAD_REQUEST)
+          return Response({
+              'error': True,
+              'code': 400,
+              'detail': 'Email has already been verified.'
+          }, status=status.HTTP_400_BAD_REQUEST)
         else:
           send_email_confirmation(request, email_address)
-          return Response({'detail': 'Email verification has been sent.'})
+          return Response({
+              'success': True,
+              'code': 200,
+              'detail': 'Email verification has been sent.'
+          }, status=status.HTTP_200_OK)
+
       except EmailAddress.DoesNotExist:
-        return Response({'detail': 'Email does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'error': True,
+            'code': 400,
+            'detail': 'Email does not exist.'
+        }, status=status.HTTP_400_BAD_REQUEST)
     else:
-      return Response({'detail': 'Please provide your email address.'}, status=status.HTTP_400_BAD_REQUEST)
+      return Response({
+          'error': True,
+          'code': 400,
+          'detail': 'Please provide your email address.'
+      }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CustomPasswordChangeView(PasswordChangeView):
@@ -309,29 +336,27 @@ class CustomPasswordChangeView(PasswordChangeView):
 
 
 class CustomPasswordResetView(PasswordResetView):
+  permission_classes = (IsAuthenticated,)
+
   def post(self, request, *args, **kwargs):
     email = request.data.get('email', None)
     if email:
       send_email_confirmation(request, email)
-      return Response({'detail': 'Password reset e-mail has been sent.'})
+      return Response({
+          'success': True,
+          'code': 200,
+          'detail': 'Password reset e-mail has been sent.'
+      }, status=status.HTTP_200_OK)
     else:
-      return Response({'detail': 'Please provide your email address.'}, status=status.HTTP_400_BAD_REQUEST)
+      return Response({
+          'error': True,
+          'code': 400,
+          'detail': 'Please provide your email address.'
+      }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CustomPasswordResetConfirmView(PasswordResetConfirmView):
   pass
-
-
-# class UserView(LoginRequiredMixin, View):
-#   def get(self, request):
-#     user = request.user
-#     response_data = {
-#         'id': user.id,
-#         'email': user.email,
-#         'first_name': user.first_name,
-#         'last_name': user.last_name,
-#     }
-#     return JsonResponse(response_data)
 
 
 class GoogleAuthRedirectView(View):
@@ -376,10 +401,10 @@ class GoogleAuthCallbackView(APIView):
 
     if SocialAccount.objects.filter(user__email=user_info.get('email', '')).exists():
       return Response({
-          'message': 'Error',
-          'status': status.HTTP_400_BAD_REQUEST,
+          'error': True,
+          'code': 400,
           'detail': 'User with the same email already exists.'
-      })
+      }, status=status.HTTP_400_BAD_REQUEST)
 
     try:
       user.email = user_info.get('email', '')
@@ -399,26 +424,21 @@ class GoogleAuthCallbackView(APIView):
           )
       )
 
-      # Save social account
       social_account.save()
-
-      # email verification
-      # custom email template
       send_email_confirmation(request, user, 'email_confirmation')
 
-      # Return response
       return Response({
-          'message': 'Success',
-          'status': status.HTTP_200_OK,
+          'success': True,
+          'code': 200,
           'detail': 'Account has been created. Please check your email to verify your account.',
-      })
+      }, status=status.HTTP_200_OK)
 
     except Exception as e:
       return Response({
-          'message': 'Error',
-          'status': status.HTTP_400_BAD_REQUEST,
+          'error': True,
+          'code': 400,
           'detail': str(e)
-      })
+      }, status=status.HTTP_400_BAD_REQUEST)
 
       # class GoogleAuthCreateAccountView(generics.CreateAPIView):
       #   permission_classes = [AllowAny]

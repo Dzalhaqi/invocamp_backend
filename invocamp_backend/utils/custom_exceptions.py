@@ -1,4 +1,5 @@
 from rest_framework.views import exception_handler
+from rest_framework.exceptions import APIException
 
 
 def custom_exception_handler(exc, context):
@@ -8,37 +9,90 @@ def custom_exception_handler(exc, context):
 
   if exception_class == 'ValidationError':
     response.data = {
-        "error": "Please provide valid data."
+        "error": True,
+        "code": 400,
+        "detail": response.data
     }
 
   if exception_class == 'NotFound':
     response.data = {
-        "error": "Resource not found."
+        "error": True,
+        "code": 404,
+        "detail": "Resource not found"
     }
 
   if exception_class == 'AuthenticationFailed':
     response.data = {
-        "error": "Invalid Email or Password. Please try again."
+        "error": True,
+        "code": 401,
+        "detail": "Invalid credentials"
     }
 
   if exception_class == 'NotAuthenticated':
     response.data = {
-        "error": "Login first to access this resource."
+        "error": True,
+        "code": 401,
+        "detail": "Authentication credentials were not provided"
     }
 
   if exception_class == 'PermissionDenied':
     response.data = {
-        "error": "You don't have permission to access this resource."
+        "error": True,
+        "code": 403,
+        "detail": "You do not have permission to perform this action"
     }
 
   if exception_class == 'NoReverseMatch':
     response.data = {
-        "error": "Invalid URL."
+        "error": True,
+        "code": 404,
+        "detail": "Resource not found"
     }
 
   if exception_class == 'InvalidToken':
     response.data = {
-        "error": "Your authentication token is expired. Please login again."
+        "error": True,
+        "code": 401,
+        "detail": "Invalid token"
+    }
+
+  if exception_class == 'AlreadyApplied':
+    response.data = {
+        "error": True,
+        "code": 400,
+        "detail": "You have already applied for this vacancy."
+    }
+
+  if exception_class == 'VacancyNotFound':
+    response.data = {
+        "error": True,
+        "code": 404,
+        "detail": "Vacancy not found."
+    }
+
+  if exception_class == 'VacancyApplicationNotFound':
+    response.data = {
+        "error": True,
+        "code": 404,
+        "detail": "Vacancy application not found."
     }
 
   return response
+
+
+class AlreadyApplied(APIException):
+  status_code = 400
+  default_detail = 'You have already applied for this vacancy.'
+  default_code = 'already_applied'
+
+
+class VacancyNotFound(APIException):
+  status_code = 404
+  default_detail = 'Vacancy not found.'
+  default_code = 'vacancy_not_found'
+
+
+class VacancyApplicationNotFound(APIException):
+  status_code = 404
+  default_detail = 'Vacancy application not found.'
+  default_code = 'vacancy_application_not_found'

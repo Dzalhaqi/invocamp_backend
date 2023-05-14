@@ -14,9 +14,13 @@ urlpatterns = [
             protected_serve, {'document_root': settings.MEDIA_ROOT}),
     path('admin/', admin.site.urls),
     path('api/', include('account_app.urls')),
+    path('api/', include('vacancies.urls')),
     path('tinymce/', include('tinymce.urls')),
     path('', RedirectView.as_view(url='api/')),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+urlpatterns += static(settings.MEDIA_URL,
+                      document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:
   import debug_toolbar

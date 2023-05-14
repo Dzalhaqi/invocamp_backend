@@ -35,3 +35,18 @@ def validate_employee_cv(value):
   ext = os.path.splitext(value.name)[1]
   if ext.lower() != '.pdf':
     raise ValidationError('File must be a PDF.')
+
+
+def validate_profile(value):
+  """
+  Validates the profile image uploaded by the employee, and raises a
+  ValidationError if the file size is greater than 5 MB and file not in
+  image format.
+  """
+  file_size = value.size
+  if file_size > 5 * 1024 * 1024:
+    raise ValidationError("The maximum file size allowed is 5 MB.")
+
+  ext = os.path.splitext(value.name)[1]
+  if ext.lower() not in ['.jpg', '.jpeg', '.png']:
+    raise ValidationError('File must be an image.')

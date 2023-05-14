@@ -94,6 +94,7 @@ sqlparse==0.4.3
 stack-data==0.6.2
 tablib==3.4.0
 threadpoolctl==3.1.0
+timedelta==2020.12.3
 tomli==2.0.1
 tornado==6.2
 tqdm==4.65.0
